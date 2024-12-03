@@ -1,210 +1,192 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File
-from fastapi.middleware.cors import CORSMiddleware
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 import asyncio
 
-from ..agents.disciplinary.plagiarism_agent import PlagiarismDetectionAgent
-from ..agents.ethics.ethics_agent import EthicsReviewAgent
-from ..agents.disciplinary.methodology_agent import MethodologyAnalysisAgent
-from ..agents.disciplinary.citation_agent import CitationVerificationAgent
+from ..agents.base.agent import ReviewResult
+from ..agents.ethics.ethics_agent import EthicsAgent
+from ..agents.disciplinary.methodology_agent import MethodologyAgent
+from ..agents.disciplinary.citation_agent import CitationAgent
+from ..agents.disciplinary.differential_geometry_agent import DifferentialGeometryAgent
+from ..agents.disciplinary.category_agent import CategoryTheoryAgent
+from ..agents.disciplinary.algebraic_geometry_agent import AlgebraicGeometryAgent
+from ..agents.disciplinary.number_theory_agent import NumberTheoryAgent
+from ..agents.disciplinary.functional_analysis_agent import FunctionalAnalysisAgent
+from ..agents.disciplinary.probability_agent import ProbabilityTheoryAgent
+from ..agents.disciplinary.complex_analysis_agent import ComplexAnalysisAgent
 from ..core.knowledge_graph import KnowledgeGraph
 
-app = FastAPI(
-    title="Peer Review AI API",
-    description="API for the AI Multi-Agent Peer Review Framework",
-    version="0.1.0"
-)
+app = FastAPI(title="AI Peer Review System")
 
-# Configure CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Initialize agents and knowledge graph
-plagiarism_agent = PlagiarismDetectionAgent()
-ethics_agent = EthicsReviewAgent()
-methodology_agent = MethodologyAnalysisAgent()
-citation_agent = CitationVerificationAgent()
+# Initialize agents
+ethics_agent = EthicsAgent()
+methodology_agent = MethodologyAgent()
+citation_agent = CitationAgent()
 knowledge_graph = KnowledgeGraph()
 
-class ManuscriptSubmission(BaseModel):
+# Initialize mathematical agents
+differential_geometry_agent = DifferentialGeometryAgent()
+category_theory_agent = CategoryTheoryAgent()
+algebraic_geometry_agent = AlgebraicGeometryAgent()
+number_theory_agent = NumberTheoryAgent()
+functional_analysis_agent = FunctionalAnalysisAgent()
+probability_theory_agent = ProbabilityTheoryAgent()
+complex_analysis_agent = ComplexAnalysisAgent()
+
+class PaperSubmission(BaseModel):
     title: str
     abstract: str
     content: str
-    authors: List[str]
-    keywords: List[str]
-    discipline: str
+    field: str
+    references: List[str]
+    metadata: Dict[str, Any]
 
 class ReviewResponse(BaseModel):
-    manuscript_id: str
     overall_score: float
-    agent_reviews: Dict[str, Any]
-    interdisciplinary_insights: Dict[str, Any]
-    suggestions: List[str]
-    status: str
+    ethics_review: ReviewResult
+    methodology_review: ReviewResult
+    citation_review: ReviewResult
+    field_specific_review: Optional[ReviewResult]
+    knowledge_graph_analysis: Dict[str, Any]
+    recommendations: List[str]
 
-@app.on_event("startup")
-async def startup_event():
-    """Initialize agents on startup."""
-    await asyncio.gather(
-        plagiarism_agent.initialize(),
-        ethics_agent.initialize(),
-        methodology_agent.initialize(),
-        citation_agent.initialize()
-    )
-
-@app.post("/api/v1/submit", response_model=ReviewResponse)
-async def submit_manuscript(manuscript: ManuscriptSubmission):
-    """Submit a manuscript for review."""
+@app.post("/review", response_model=ReviewResponse)
+async def review_paper(submission: PaperSubmission):
     try:
-        # Perform parallel agent reviews
-        review_tasks = [
-            plagiarism_agent.review(manuscript.content, {"title": manuscript.title}),
-            ethics_agent.review(manuscript.content, {"discipline": manuscript.discipline}),
-            methodology_agent.review(manuscript.content, {"discipline": manuscript.discipline}),
-            citation_agent.review(manuscript.content, {})
-        ]
-        
-        review_results = await asyncio.gather(*review_tasks)
-        plagiarism_result, ethics_result, methodology_result, citation_result = review_results
-        
-        # Analyze interdisciplinary connections
-        knowledge_graph_analysis = knowledge_graph.analyze_manuscript(manuscript.content)
-        
-        # Calculate overall score (weighted average)
-        weights = {
-            "plagiarism": 0.25,
-            "ethics": 0.25,
-            "methodology": 0.25,
-            "citations": 0.25
-        }
-        
-        overall_score = sum([
-            plagiarism_result.score * weights["plagiarism"],
-            ethics_result.score * weights["ethics"],
-            methodology_result.score * weights["methodology"],
-            citation_result.score * weights["citations"]
-        ])
-        
-        # Combine all suggestions
-        all_suggestions = []
-        all_suggestions.extend(plagiarism_result.suggestions)
-        all_suggestions.extend(ethics_result.suggestions)
-        all_suggestions.extend(methodology_result.suggestions)
-        all_suggestions.extend(citation_result.suggestions)
-        
-        return ReviewResponse(
-            manuscript_id="MS" + str(hash(manuscript.title))[:8],
-            overall_score=overall_score,
-            agent_reviews={
-                "plagiarism": {
-                    "score": plagiarism_result.score,
-                    "comments": plagiarism_result.comments,
-                    "confidence": plagiarism_result.confidence
-                },
-                "ethics": {
-                    "score": ethics_result.score,
-                    "comments": ethics_result.comments,
-                    "confidence": ethics_result.confidence
-                },
-                "methodology": {
-                    "score": methodology_result.score,
-                    "comments": methodology_result.comments,
-                    "confidence": methodology_result.confidence
-                },
-                "citations": {
-                    "score": citation_result.score,
-                    "comments": citation_result.comments,
-                    "confidence": citation_result.confidence
-                }
-            },
-            interdisciplinary_insights=knowledge_graph_analysis,
-            suggestions=all_suggestions,
-            status="completed"
+        # Initialize all agents if needed
+        await asyncio.gather(
+            ethics_agent.initialize(),
+            methodology_agent.initialize(),
+            citation_agent.initialize(),
+            differential_geometry_agent.initialize(),
+            category_theory_agent.initialize(),
+            algebraic_geometry_agent.initialize(),
+            number_theory_agent.initialize(),
+            functional_analysis_agent.initialize(),
+            probability_theory_agent.initialize(),
+            complex_analysis_agent.initialize()
         )
-    
+
+        # Perform basic reviews
+        ethics_review = await ethics_agent.review(submission.content, submission.metadata)
+        methodology_review = await methodology_agent.review(submission.content, submission.metadata)
+        citation_review = await citation_agent.review(submission.content, {"references": submission.references})
+
+        # Field-specific review based on paper field
+        field_specific_review = None
+        if submission.field.lower() in ["differential geometry", "geometry"]:
+            field_specific_review = await differential_geometry_agent.review(submission.content, submission.metadata)
+        elif submission.field.lower() in ["category theory", "categories"]:
+            field_specific_review = await category_theory_agent.review(submission.content, submission.metadata)
+        elif submission.field.lower() in ["algebraic geometry", "schemes"]:
+            field_specific_review = await algebraic_geometry_agent.review(submission.content, submission.metadata)
+        elif submission.field.lower() in ["number theory", "arithmetic"]:
+            field_specific_review = await number_theory_agent.review(submission.content, submission.metadata)
+        elif submission.field.lower() in ["functional analysis", "analysis"]:
+            field_specific_review = await functional_analysis_agent.review(submission.content, submission.metadata)
+        elif submission.field.lower() in ["probability", "stochastic"]:
+            field_specific_review = await probability_theory_agent.review(submission.content, submission.metadata)
+        elif submission.field.lower() in ["complex analysis", "complex variables"]:
+            field_specific_review = await complex_analysis_agent.review(submission.content, submission.metadata)
+
+        # Update knowledge graph
+        graph_analysis = knowledge_graph.analyze_paper(
+            submission.content,
+            submission.references,
+            submission.field
+        )
+
+        # Calculate overall score
+        base_score = (
+            ethics_review.score * 0.3 +
+            methodology_review.score * 0.3 +
+            citation_review.score * 0.2
+        )
+        
+        if field_specific_review:
+            overall_score = base_score + (field_specific_review.score * 0.2)
+        else:
+            overall_score = base_score / 0.8  # Normalize to 1.0 scale
+
+        # Compile recommendations
+        recommendations = []
+        recommendations.extend(ethics_review.suggestions)
+        recommendations.extend(methodology_review.suggestions)
+        recommendations.extend(citation_review.suggestions)
+        if field_specific_review:
+            recommendations.extend(field_specific_review.suggestions)
+
+        return ReviewResponse(
+            overall_score=overall_score,
+            ethics_review=ethics_review,
+            methodology_review=methodology_review,
+            citation_review=citation_review,
+            field_specific_review=field_specific_review,
+            knowledge_graph_analysis=graph_analysis,
+            recommendations=recommendations
+        )
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/v1/upload-pdf")
-async def upload_pdf(file: UploadFile = File(...)):
-    """Upload a PDF manuscript."""
-    if not file.filename.endswith('.pdf'):
-        raise HTTPException(status_code=400, detail="Only PDF files are accepted")
-    
-    # In a real implementation, we would:
-    # 1. Save the PDF
-    # 2. Extract text using a PDF parser
-    # 3. Process the extracted text
-    
-    return {"filename": file.filename, "status": "uploaded"}
-
-@app.get("/api/v1/status/{manuscript_id}")
-async def get_review_status(manuscript_id: str):
-    """Get the status of a manuscript review."""
-    # In a real implementation, we would check a database
-    return {"manuscript_id": manuscript_id, "status": "in_progress"}
-
-@app.get("/api/v1/agents")
-async def list_agents():
-    """List available review agents and their capabilities."""
+@app.get("/agents/capabilities")
+async def get_agent_capabilities():
+    """Get the capabilities of all available agents."""
     return {
-        "agents": [
-            {
-                "name": plagiarism_agent.name,
-                "type": plagiarism_agent.agent_type.value,
-                "capabilities": plagiarism_agent.get_capabilities()
-            },
-            {
-                "name": ethics_agent.name,
-                "type": ethics_agent.agent_type.value,
-                "capabilities": ethics_agent.get_capabilities()
-            },
-            {
-                "name": methodology_agent.name,
-                "type": methodology_agent.agent_type.value,
-                "capabilities": methodology_agent.get_capabilities()
-            },
-            {
-                "name": citation_agent.name,
-                "type": citation_agent.agent_type.value,
-                "capabilities": citation_agent.get_capabilities()
-            }
-        ]
+        "ethics": ethics_agent.get_capabilities(),
+        "methodology": methodology_agent.get_capabilities(),
+        "citation": citation_agent.get_capabilities(),
+        "differential_geometry": differential_geometry_agent.get_capabilities(),
+        "category_theory": category_theory_agent.get_capabilities(),
+        "algebraic_geometry": algebraic_geometry_agent.get_capabilities(),
+        "number_theory": number_theory_agent.get_capabilities(),
+        "functional_analysis": functional_analysis_agent.get_capabilities(),
+        "probability_theory": probability_theory_agent.get_capabilities(),
+        "complex_analysis": complex_analysis_agent.get_capabilities()
     }
 
-@app.get("/api/v1/knowledge-graph/concepts/{concept}")
-async def get_concept_connections(concept: str, threshold: float = 0.7):
-    """Get interdisciplinary connections for a concept."""
-    connections = knowledge_graph.find_interdisciplinary_connections(concept, threshold)
-    return {
-        "concept": concept,
-        "connections": connections
-    }
+@app.post("/collaborate/{agent_type}")
+async def agent_collaboration(agent_type: str, data: Dict[str, Any]):
+    """Enable collaboration between different types of agents."""
+    try:
+        if agent_type == "mathematics":
+            # Collaborate between mathematical agents
+            results = await asyncio.gather(
+                differential_geometry_agent.collaborate(category_theory_agent, data),
+                algebraic_geometry_agent.collaborate(number_theory_agent, data),
+                functional_analysis_agent.collaborate(probability_theory_agent, data),
+                complex_analysis_agent.collaborate(functional_analysis_agent, data)
+            )
+            return {"collaboration_results": results}
+        elif agent_type == "methodology":
+            # Collaborate between methodology and field-specific agents
+            results = await asyncio.gather(
+                methodology_agent.collaborate(differential_geometry_agent, data),
+                methodology_agent.collaborate(complex_analysis_agent, data)
+            )
+            return {"collaboration_results": results}
+        else:
+            raise HTTPException(status_code=400, detail="Invalid agent type for collaboration")
 
-@app.get("/api/v1/knowledge-graph/disciplines/{discipline1}/{discipline2}")
-async def get_discipline_overlap(discipline1: str, discipline2: str):
-    """Get concepts that bridge two disciplines."""
-    overlapping_concepts = knowledge_graph.get_discipline_overlap(discipline1, discipline2)
-    return {
-        "discipline1": discipline1,
-        "discipline2": discipline2,
-        "overlapping_concepts": overlapping_concepts
-    }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/v1/knowledge-graph/central-concepts")
-async def get_central_concepts(top_k: int = 10):
-    """Get the most central concepts in the knowledge graph."""
-    central_concepts = knowledge_graph.get_central_concepts(top_k)
+@app.get("/health")
+async def health_check():
+    """Check the health status of the API and its components."""
     return {
-        "central_concepts": central_concepts
+        "status": "healthy",
+        "agents": {
+            "ethics": ethics_agent.is_initialized,
+            "methodology": methodology_agent.is_initialized,
+            "citation": citation_agent.is_initialized,
+            "differential_geometry": differential_geometry_agent.is_initialized,
+            "category_theory": category_theory_agent.is_initialized,
+            "algebraic_geometry": algebraic_geometry_agent.is_initialized,
+            "number_theory": number_theory_agent.is_initialized,
+            "functional_analysis": functional_analysis_agent.is_initialized,
+            "probability_theory": probability_theory_agent.is_initialized,
+            "complex_analysis": complex_analysis_agent.is_initialized
+        },
+        "knowledge_graph": "active"
     }
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000) 
