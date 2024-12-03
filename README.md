@@ -110,6 +110,23 @@ peer_review_ai/
 ├── tests/            # Test suites
 └── docs/             # Documentation
 ```
+## Mathematical Agents
+
+The system now includes specialized mathematical agents for reviewing papers in:
+- Differential Geometry
+- Category Theory
+- Algebraic Geometry
+- Number Theory
+- Functional Analysis
+- Probability Theory
+- Complex Analysis
+
+Each agent is equipped with domain-specific knowledge and can:
+- Verify mathematical correctness
+- Check proofs and theorems
+- Analyze specialized structures
+- Validate field-specific methodologies
+
 
 ## Adding New Agents
 
